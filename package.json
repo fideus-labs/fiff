@@ -41,11 +41,21 @@
   },
   "dependencies": {
     "geotiff": "^3.0.4-beta.1",
+    "pako": "^2.1.0",
     "zarrita": "^0.6.1"
+  },
+  "peerDependencies": {
+    "@fideus-labs/ngff-zarr": "^0.8.0"
+  },
+  "peerDependenciesMeta": {
+    "@fideus-labs/ngff-zarr": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@fideus-labs/ngff-zarr": "^0.8.0",
     "@types/bun": "^1.2.15",
+    "@types/pako": "^2.0.4",
     "typescript": "^5.9.3"
   }
 }

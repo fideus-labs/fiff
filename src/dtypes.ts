@@ -124,6 +124,48 @@ export function bytesPerElement(dtype: ZarrDataType): number {
 }
 
 /**
+ * Map a Zarr v3 data_type string to an OME-XML pixel Type string.
+ * Reverse of omePixelTypeToZarr.
+ */
+export function zarrToOmePixelType(dtype: ZarrDataType): string {
+  const map: Record<ZarrDataType, string> = {
+    int8: "int8",
+    int16: "int16",
+    int32: "int32",
+    uint8: "uint8",
+    uint16: "uint16",
+    uint32: "uint32",
+    float32: "float",
+    float64: "double",
+  };
+  return map[dtype];
+}
+
+/** TIFF tag values for a given Zarr data_type. */
+export interface TiffDtypeInfo {
+  sampleFormat: number;
+  bitsPerSample: number;
+}
+
+/**
+ * Map a Zarr v3 data_type string to TIFF SampleFormat + BitsPerSample.
+ * Reverse of tiffDtypeToZarr.
+ */
+export function zarrToTiffDtype(dtype: ZarrDataType): TiffDtypeInfo {
+  const map: Record<ZarrDataType, TiffDtypeInfo> = {
+    uint8: { sampleFormat: SAMPLE_FORMAT_UINT, bitsPerSample: 8 },
+    uint16: { sampleFormat: SAMPLE_FORMAT_UINT, bitsPerSample: 16 },
+    uint32: { sampleFormat: SAMPLE_FORMAT_UINT, bitsPerSample: 32 },
+    int8: { sampleFormat: SAMPLE_FORMAT_INT, bitsPerSample: 8 },
+    int16: { sampleFormat: SAMPLE_FORMAT_INT, bitsPerSample: 16 },
+    int32: { sampleFormat: SAMPLE_FORMAT_INT, bitsPerSample: 32 },
+    float32: { sampleFormat: SAMPLE_FORMAT_FLOAT, bitsPerSample: 32 },
+    float64: { sampleFormat: SAMPLE_FORMAT_FLOAT, bitsPerSample: 64 },
+  };
+  return map[dtype];
+}
+
+/**
  * Get the appropriate TypedArray constructor for a Zarr data_type.
  */
 export function getTypedArrayConstructor(

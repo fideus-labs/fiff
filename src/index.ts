@@ -36,7 +36,26 @@ export type {
   ZarrArrayMetadata,
 } from "./metadata.js";
 
+// Writer
+export { toOmeTiff, type WriteOptions } from "./write.js";
+export { buildOmeXml, type OmeXmlWriterOptions, type DimensionInfo } from "./ome-xml-writer.js";
+export {
+  buildTiff,
+  makeImageTags,
+  compressDeflate,
+  type WritableIfd,
+  type TiffTag,
+  type BuildTiffOptions,
+} from "./tiff-writer.js";
+
 // Export utilities that may be useful
 export { parseOmeXml, isOmeXml, getIfdIndex } from "./ome-xml.js";
-export { tiffDtypeToZarr, omePixelTypeToZarr, bytesPerElement } from "./dtypes.js";
+export {
+  tiffDtypeToZarr,
+  omePixelTypeToZarr,
+  zarrToOmePixelType,
+  zarrToTiffDtype,
+  bytesPerElement,
+  type TiffDtypeInfo,
+} from "./dtypes.js";
 export { parseStoreKey, computePixelWindow } from "./utils.js";

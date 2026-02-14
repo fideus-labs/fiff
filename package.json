@@ -1,0 +1,39 @@
+{
+  "name": "@fideus-labs/fiff",
+  "version": "0.1.0",
+  "description": "Present TIFF files as a zarrita.js Zarr store following the OME-Zarr data model",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE.txt"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fideus-labs/fiff"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "geotiff": "^3.0.4-beta.1",
+    "zarrita": "^0.6.1"
+  },
+  "devDependencies": {
+    "@fideus-labs/ngff-zarr": "file:/home/matt/src/ngff-zarr/ts/npm",
+    "@types/bun": "^1.2.15",
+    "typescript": "^5.9.3"
+  }
+}

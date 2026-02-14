@@ -1,1 +1,6 @@
 .context/
+.opencode/
+node_modules/
+dist/
+bun.lock
+*.tgz

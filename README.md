@@ -11,10 +11,12 @@
 </p>
 
 <p align="center">
-  Present <a href="https://docs.openmicroscopy.org/ome-model/latest/ome-tiff/">TIFF</a> and <a href="https://docs.openmicroscopy.org/ome-model/latest/ome-tiff/">OME-TIFF</a> files as a <a href="https://github.com/manzt/zarrita.js">zarrita.js</a> Zarr store following the <a href="https://ngff.openmicroscopy.org/0.5/">OME-Zarr v0.5</a> data model.
+  Read and write <a href="https://docs.openmicroscopy.org/ome-model/latest/ome-tiff/">OME-TIFF</a> files through a <a href="https://github.com/manzt/zarrita.js">zarrita.js</a> Zarr store following the <a href="https://ngff.openmicroscopy.org/0.5/">OME-Zarr v0.5</a> data model.
 </p>
 
 ## ✨ Features
+
+### Reading
 
 - 🚀 **Lazy HTTP range requests** -- Chunk data is fetched on demand via
   geotiff.js `readRasters()`, no full file download needed
@@ -29,51 +31,192 @@
 - 📋 **OME-Zarr v0.5 output** -- Generates Zarr v3 metadata with
   `ome.multiscales` and `ome.omero` attributes
 
+### Writing
+
+- 📝 **OME-TIFF generation** -- Convert ngff-zarr `Multiscales` objects to
+  valid OME-TIFF files with embedded OME-XML metadata
+- 🔻 **Full pyramid support** -- Multi-resolution levels are written as SubIFDs,
+  matching the modern OME-TIFF pyramid convention
+- 🗜️ **Deflate compression** -- Optional zlib/deflate compression for smaller
+  files, compatible with all major TIFF readers
+- 📐 **5D support** -- Handles all dimension orders (XYZCT, XYZTC, etc.) and
+  arbitrary combinations of T, C, Z, Y, X axes
+
 ## 📦 Installation
 
 ```bash
 npm install @fideus-labs/fiff
 ```
 
-## ⚡ Quick Start
+For write support, also install the optional peer dependency:
 
-### From a remote URL
-
-```typescript
-import { TiffStore } from "@fideus-labs/fiff"
-import * as zarr from "zarrita"
-
-const store = await TiffStore.fromUrl("https://example.com/image.ome.tif")
-const group = await zarr.open(store as unknown as zarr.Readable, { kind: "group" })
-const arr = await zarr.open(group.resolve("0"), { kind: "array" })
-const chunk = await zarr.get(arr)
+```bash
+npm install @fideus-labs/ngff-zarr
 ```
 
-### From an ArrayBuffer
+## ⚡ Usage
+
+### Reading: Open an OME-TIFF as a Zarr store
+
+#### From a remote URL
 
 ```typescript
-const response = await fetch("https://example.com/image.tif")
-const buffer = await response.arrayBuffer()
-const store = await TiffStore.fromArrayBuffer(buffer)
+import { TiffStore } from "@fideus-labs/fiff";
+import * as zarr from "zarrita";
+
+const store = await TiffStore.fromUrl("https://example.com/image.ome.tif");
+const group = await zarr.open(store as unknown as zarr.Readable, { kind: "group" });
+
+// Open the full-resolution array (level 0)
+const arr = await zarr.open(group.resolve("0"), { kind: "array" });
+const chunk = await zarr.get(arr);
+
+console.log(chunk.shape); // e.g. [1, 3, 1, 512, 512]
+console.log(chunk.data);  // Float32Array, Uint16Array, etc.
 ```
 
-### From a File / Blob
+#### From an ArrayBuffer
 
 ```typescript
-const file = document.querySelector("input[type=file]").files[0]
-const store = await TiffStore.fromBlob(file)
+const response = await fetch("https://example.com/image.tif");
+const buffer = await response.arrayBuffer();
+const store = await TiffStore.fromArrayBuffer(buffer);
 ```
 
-### From an existing GeoTIFF instance
+#### From a File / Blob
 
 ```typescript
-import { fromUrl } from "geotiff"
-
-const tiff = await fromUrl("https://example.com/image.tif")
-const store = await TiffStore.fromGeoTIFF(tiff)
+const file = document.querySelector("input[type=file]").files[0];
+const store = await TiffStore.fromBlob(file);
 ```
 
-## 🏭 Factory Methods
+#### From an existing GeoTIFF instance
+
+```typescript
+import { fromUrl } from "geotiff";
+
+const tiff = await fromUrl("https://example.com/image.tif");
+const store = await TiffStore.fromGeoTIFF(tiff);
+```
+
+#### Accessing store metadata
+
+```typescript
+const store = await TiffStore.fromUrl("https://example.com/image.ome.tif");
+
+store.levels;         // number of resolution levels
+store.dataType;       // "uint16", "float32", etc.
+store.dimensionNames; // ["t", "c", "z", "y", "x"]
+store.getShape(0);    // full-res shape, e.g. [1, 3, 1, 2048, 2048]
+store.getShape(1);    // level 1 shape, e.g. [1, 3, 1, 1024, 1024]
+store.ome;            // parsed OME-XML image metadata (if present)
+store.pyramidInfo;    // pyramid structure details
+```
+
+### Writing: Convert ngff-zarr Multiscales to OME-TIFF
+
+`toOmeTiff()` takes an ngff-zarr `Multiscales` object and returns a complete
+OME-TIFF file as an `ArrayBuffer`.
+
+#### Basic write
+
+```typescript
+import { toOmeTiff } from "@fideus-labs/fiff";
+import {
+  createNgffImage,
+  createAxis,
+  createDataset,
+  createMetadata,
+  createMultiscales,
+} from "@fideus-labs/ngff-zarr";
+import * as zarr from "zarrita";
+
+// 1. Create an ngff-zarr image
+const image = await createNgffImage(
+  [],              // no parent images
+  [512, 512],      // shape: [y, x]
+  "uint16",        // data type
+  ["y", "x"],      // dimension names
+  { y: 0.5, x: 0.5 },    // pixel spacing (micrometers)
+  { y: 0.0, x: 0.0 },    // origin offsets
+  "my-image",
+);
+
+// 2. Populate pixel data
+const data = new Uint16Array(512 * 512);
+for (let i = 0; i < data.length; i++) data[i] = i % 65536;
+await zarr.set(image.data, null, {
+  data,
+  shape: [512, 512],
+  stride: [512, 1],
+});
+
+// 3. Build the Multiscales object
+const axes = [
+  createAxis("y", "space", "micrometer"),
+  createAxis("x", "space", "micrometer"),
+];
+const datasets = [createDataset("0", [0.5, 0.5], [0.0, 0.0])];
+const metadata = createMetadata(axes, datasets, "my-image");
+const multiscales = createMultiscales([image], metadata);
+
+// 4. Write to OME-TIFF
+const buffer = await toOmeTiff(multiscales);
+
+// Save to disk (Node.js / Bun)
+await Bun.write("output.ome.tif", buffer);
+```
+
+#### Write options
+
+```typescript
+const buffer = await toOmeTiff(multiscales, {
+  compression: "deflate",  // "deflate" (default) or "none"
+  compressionLevel: 6,     // 1-9, default 6 (only for deflate)
+  dimensionOrder: "XYZCT", // IFD layout order, default "XYZCT"
+  imageName: "my-image",   // name in OME-XML metadata
+  creator: "my-app",       // creator string in OME-XML
+});
+```
+
+#### Multi-resolution pyramids
+
+When the `Multiscales` object contains multiple images (resolution levels),
+all sub-resolution levels are written as SubIFDs:
+
+```typescript
+const fullRes = await createNgffImage([], [1024, 1024], "uint16", ["y", "x"], ...);
+const halfRes = await createNgffImage([], [512, 512], "uint16", ["y", "x"], ...);
+// ... populate both images with zarr.set() ...
+
+const datasets = [
+  createDataset("0", [0.5, 0.5], [0.0, 0.0]),
+  createDataset("1", [1.0, 1.0], [0.0, 0.0]),
+];
+const metadata = createMetadata(axes, datasets, "pyramid");
+const multiscales = createMultiscales([fullRes, halfRes], metadata);
+
+const buffer = await toOmeTiff(multiscales);
+// Result: OME-TIFF with full-res IFDs + half-res SubIFDs
+```
+
+#### Round-trip: write then read back
+
+```typescript
+import { toOmeTiff, TiffStore } from "@fideus-labs/fiff";
+import * as zarr from "zarrita";
+
+const buffer = await toOmeTiff(multiscales);
+const store = await TiffStore.fromArrayBuffer(buffer);
+const group = await zarr.open(store as unknown as zarr.Readable, { kind: "group" });
+const arr = await zarr.open(group.resolve("0"), { kind: "array" });
+const result = await zarr.get(arr);
+// result.data contains the original pixel values
+```
+
+## 🏭 Read API
+
+### Factory Methods
 
 | Method                            | Description                                    |
 | --------------------------------- | ---------------------------------------------- |
@@ -82,7 +225,7 @@ const store = await TiffStore.fromGeoTIFF(tiff)
 | `TiffStore.fromBlob(blob)`        | Open from a Blob or File                       |
 | `TiffStore.fromGeoTIFF(tiff)`     | Open from an already-opened GeoTIFF instance   |
 
-## ⚙️ Options
+### Options
 
 All factory methods accept an optional `TiffStoreOptions` object:
 
@@ -91,7 +234,7 @@ All factory methods accept an optional `TiffStoreOptions` object:
 | `offsets` | `number[]`               | `undefined` | Pre-computed IFD byte offsets for O(1) access   |
 | `headers` | `Record<string, string>` | `undefined` | Additional HTTP headers for remote TIFF requests |
 
-## 📖 Public Accessors
+### Public Accessors
 
 | Accessor              | Type           | Description                        |
 | --------------------- | -------------- | ---------------------------------- |
@@ -102,6 +245,27 @@ All factory methods accept an optional `TiffStoreOptions` object:
 | `store.dimensionNames`| `string[]`     | Dimension names (e.g. `["t", "c", "z", "y", "x"]`) |
 | `store.getShape(l)`   | `number[]`     | Shape for resolution level `l`     |
 | `store.getChunkShape(l)` | `number[]`  | Chunk shape for resolution level `l` |
+
+## 📝 Write API
+
+### `toOmeTiff(multiscales, options?)`
+
+| Parameter     | Type          | Description                                            |
+| ------------- | ------------- | ------------------------------------------------------ |
+| `multiscales` | `Multiscales` | ngff-zarr Multiscales object with populated pixel data |
+| `options`     | `WriteOptions`| Optional writer configuration                          |
+
+**Returns:** `Promise<ArrayBuffer>` -- a complete OME-TIFF file.
+
+### WriteOptions
+
+| Option             | Type                   | Default     | Description                              |
+| ------------------ | ---------------------- | ----------- | ---------------------------------------- |
+| `compression`      | `"none" \| "deflate"`  | `"deflate"` | Pixel data compression                   |
+| `compressionLevel` | `number`               | `6`         | Deflate level 1-9 (higher = smaller)     |
+| `dimensionOrder`   | `string`               | `"XYZCT"`   | IFD plane layout order                   |
+| `imageName`        | `string`               | `"image"`   | Image name in OME-XML                    |
+| `creator`          | `string`               | `"fiff"`    | Creator string in OME-XML                |
 
 ## 🛠️ Development
 
@@ -127,11 +291,14 @@ src/
   ome-xml.ts        # OME-XML parser (dimensions, channels, DimensionOrder)
   ifd-indexer.ts    # IFD-to-pyramid-level mapping (SubIFD/legacy/COG)
   chunk-reader.ts   # Pixel data reading via geotiff.js readRasters
-  dtypes.ts         # TIFF SampleFormat -> Zarr data_type mapping
+  dtypes.ts         # TIFF ↔ Zarr data_type mapping
   utils.ts          # Key parsing, pixel window computation, encoding
+  write.ts          # High-level toOmeTiff() writer
+  tiff-writer.ts    # Low-level TIFF binary builder (IFDs, SubIFDs, deflate)
+  ome-xml-writer.ts # OME-XML generation from Multiscales metadata
 test/
   fixtures.ts       # Test TIFF generation helpers
-  *.test.ts         # 120 tests across 8 files
+  *.test.ts         # 175 tests across 11 files
 ```
 
 ### 📝 Commands

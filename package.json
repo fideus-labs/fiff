@@ -1,7 +1,7 @@
 {
   "name": "@fideus-labs/fiff",
   "version": "0.1.0",
-  "description": "Present TIFF files as a zarrita.js Zarr store following the OME-Zarr data model",
+  "description": "Present TIFF files as a zarrita.js Zarr store following the NGFF OME-Zarr data model",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -21,6 +21,18 @@
     "url": "https://github.com/fideus-labs/fiff"
   },
   "license": "MIT",
+  "keywords": [
+    "tiff",
+    "ome-tiff",
+    "zarr",
+    "ome-zarr",
+    "ngff",
+    "zarrita",
+    "geotiff",
+    "bioimaging",
+    "microscopy",
+    "multiscale"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "bun test",

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * Metadata synthesis: generate Zarr v3 (OME-Zarr 0.5) metadata from
  * TIFF image properties and OME-XML.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect } from "bun:test";
 import {
   isOmeXml,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * Chunk reader: reads pixel data from a GeoTIFFImage for a specific chunk,
  * returning raw bytes suitable for a Zarr store response.

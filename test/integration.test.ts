@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * Integration tests: verify that TiffStore produces valid OME-Zarr
  * that can be read back by zarrita.js and @fideus-labs/ngff-zarr.

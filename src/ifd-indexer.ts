@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * IFD indexer: maps (c, z, t, resolution level) to a GeoTIFFImage.
  *

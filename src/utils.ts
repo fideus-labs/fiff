@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * Utility helpers for key parsing, pixel window computation, and
  * general-purpose functions used across the package.

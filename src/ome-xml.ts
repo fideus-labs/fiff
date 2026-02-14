@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * OME-XML parser for extracting metadata from OME-TIFF ImageDescription tags.
  *

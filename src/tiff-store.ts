@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) Fideus Labs LLC
+// SPDX-License-Identifier: MIT
+
 /**
  * TiffStore: a zarrita.js-compatible AsyncReadable store that presents
  * TIFF files as OME-Zarr v0.5 datasets.

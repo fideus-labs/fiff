@@ -5,8 +5,9 @@
  * High-level OME-TIFF writer.
  *
  * Converts an ngff-zarr Multiscales object to a complete OME-TIFF file
- * as an ArrayBuffer. Supports multi-resolution pyramids (via SubIFDs)
- * and optional deflate compression.
+ * as an ArrayBuffer. Supports multi-resolution pyramids (via SubIFDs),
+ * tiled output, deflate compression, parallel plane reading, and
+ * automatic BigTIFF detection.
  *
  * @example
  * ```ts
@@ -27,9 +28,10 @@ import type { DimensionInfo } from "./ome-xml-writer.js";
 import {
   buildTiff,
   makeImageTags,
+  sliceTiles,
+  DEFAULT_TILE_SIZE,
   type WritableIfd,
 } from "./tiff-writer.js";
-import { getIfdIndex } from "./ome-xml.js";
 import type { OmePixels } from "./ome-xml.js";
 
 /** Options for the OME-TIFF writer. */
@@ -68,6 +70,31 @@ export interface WriteOptions {
 
   /** Image name. Falls back to multiscales.metadata.name or "image". */
   imageName?: string;
+
+  /**
+   * Tile size in pixels. Images larger than this in either dimension
+   * will use tiled output. Must be a multiple of 16.
+   * Default: 256 (OME-TIFF convention).
+   * Set to 0 to disable tiling (strip-based output).
+   */
+  tileSize?: number;
+
+  /**
+   * Maximum number of planes to read concurrently.
+   * Higher values use more memory but can speed up writes when
+   * reading from async data sources.
+   * Default: 4.
+   */
+  concurrency?: number;
+
+  /**
+   * TIFF format to use.
+   * - "auto": Classic TIFF when possible, BigTIFF for files > 4 GB.
+   * - "classic": Force classic TIFF (fails if file > 4 GB).
+   * - "bigtiff": Force BigTIFF (64-bit offsets).
+   * Default: "auto".
+   */
+  format?: "auto" | "classic" | "bigtiff";
 }
 
 /**
@@ -77,6 +104,9 @@ export interface WriteOptions {
  * Multiscales has more than one image. The highest-resolution
  * level goes in the main IFD chain; lower-resolution levels
  * are attached as SubIFDs to each corresponding main IFD.
+ *
+ * Planes are read with bounded concurrency and tiles are compressed
+ * eagerly to minimise peak memory.
  *
  * @param multiscales - The ngff-zarr Multiscales object to write.
  * @param options - Writer options.
@@ -89,6 +119,9 @@ export async function toOmeTiff(
   const dimensionOrder = options.dimensionOrder ?? "XYZCT";
   const compression = options.compression ?? "deflate";
   const compressionLevel = options.compressionLevel ?? 6;
+  const tileSize = options.tileSize ?? DEFAULT_TILE_SIZE;
+  const concurrency = options.concurrency ?? 4;
+  const format = options.format ?? "auto";
 
   const fullResImage = multiscales.images[0];
   const dtype = fullResImage.data.dtype as ZarrDataType;
@@ -103,34 +136,17 @@ export async function toOmeTiff(
     imageName: options.imageName,
   });
 
-  // Build a pseudo OmePixels for IFD index computation
-  const pixels: OmePixels = {
-    dimensionOrder: dimensionOrder as OmePixels["dimensionOrder"],
-    type: "",
-    sizeX: dims.sizeX,
-    sizeY: dims.sizeY,
-    sizeZ: dims.sizeZ,
-    sizeC: dims.sizeC,
-    sizeT: dims.sizeT,
-    bigEndian: false,
-    interleaved: false,
-    channels: [],
-  };
-
   const totalPlanes = dims.sizeC * dims.sizeZ * dims.sizeT;
   const numLevels = multiscales.images.length;
 
-  // Iterate planes in DimensionOrder order and build main IFDs
-  const mainIfds: WritableIfd[] = [];
-
-  for (let ifdIdx = 0; ifdIdx < totalPlanes; ifdIdx++) {
-    // Find the (c, z, t) that maps to this IFD index
+  // Build one IFD (with SubIFDs) for a given plane index.
+  const buildPlaneIfd = async (ifdIdx: number): Promise<WritableIfd> => {
     const { c, z, t } = ifdIndexToPlane(ifdIdx, dims, dimensionOrder);
 
-    // Read pixel data for full-resolution plane
-    const stripData = await readPlane(fullResImage, dims, c, z, t, bpe);
+    // Read + tile the full-resolution plane
+    const planeData = await readPlane(fullResImage, dims, c, z, t, bpe);
+    const mainTiles = slicePlane(planeData, dims.sizeX, dims.sizeY, bpe, tileSize);
 
-    // Build tags
     const isFirst = ifdIdx === 0;
     const tags = makeImageTags(
       dims.sizeX,
@@ -140,6 +156,7 @@ export async function toOmeTiff(
       "none", // compression handled by buildTiff
       isFirst ? omeXml : undefined,
       false,
+      tileSize,
     );
 
     // Build SubIFDs for pyramid levels (if any)
@@ -147,32 +164,65 @@ export async function toOmeTiff(
     for (let level = 1; level < numLevels; level++) {
       const subImage = multiscales.images[level];
       const subDims = extractLevelDimensions(subImage, dims);
-      const subStripData = await readPlane(subImage, subDims, c, z, t, bpe);
+      const subPlane = await readPlane(subImage, subDims, c, z, t, bpe);
+      const subTiles = slicePlane(subPlane, subDims.sizeX, subDims.sizeY, bpe, tileSize);
 
       const subTags = makeImageTags(
         subDims.sizeX,
         subDims.sizeY,
         tiffDtype.bitsPerSample,
         tiffDtype.sampleFormat,
-        "none", // compression handled by buildTiff
+        "none",
         undefined,
         true, // isSubResolution
+        tileSize,
       );
 
-      subIfds.push({ tags: subTags, strips: [subStripData] });
+      subIfds.push({ tags: subTags, tiles: subTiles });
     }
 
-    mainIfds.push({
+    return {
       tags,
-      strips: [stripData],
+      tiles: mainTiles,
       subIfds: subIfds.length > 0 ? subIfds : undefined,
-    });
+    };
+  };
+
+  // Read planes with bounded concurrency
+  const mainIfds: WritableIfd[] = new Array(totalPlanes);
+  const effectiveConcurrency = Math.max(1, Math.min(concurrency, totalPlanes));
+
+  for (let start = 0; start < totalPlanes; start += effectiveConcurrency) {
+    const end = Math.min(start + effectiveConcurrency, totalPlanes);
+    const batch = [];
+    for (let i = start; i < end; i++) {
+      batch.push(buildPlaneIfd(i).then((ifd) => { mainIfds[i] = ifd; }));
+    }
+    await Promise.all(batch);
   }
 
-  return buildTiff(mainIfds, { compression, compressionLevel });
+  return buildTiff(mainIfds, { compression, compressionLevel, format });
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
+
+/**
+ * Slice a plane into tiles or return as a single strip.
+ * Decides based on whether the image is large enough to warrant tiling.
+ */
+function slicePlane(
+  planeBytes: Uint8Array,
+  width: number,
+  height: number,
+  bpe: number,
+  tileSize: number,
+): Uint8Array[] {
+  if (tileSize > 0 && (width > tileSize || height > tileSize)) {
+    return sliceTiles(planeBytes, width, height, bpe, tileSize, tileSize);
+  }
+  // Small image: single strip
+  return [planeBytes];
+}
 
 /**
  * Map a linear IFD index back to (c, z, t) based on DimensionOrder.

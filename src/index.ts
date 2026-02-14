@@ -42,7 +42,10 @@ export { buildOmeXml, type OmeXmlWriterOptions, type DimensionInfo } from "./ome
 export {
   buildTiff,
   makeImageTags,
+  sliceTiles,
   compressDeflate,
+  compressDeflateAsync,
+  DEFAULT_TILE_SIZE,
   type WritableIfd,
   type TiffTag,
   type BuildTiffOptions,

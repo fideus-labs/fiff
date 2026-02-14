@@ -214,10 +214,9 @@ describe("toOmeTiff", () => {
       const rasters = await image.readRasters();
       const pixels = rasters[0] as Uint16Array;
 
-      // Verify known pixel values
-      expect(pixels[0]).toBe(0);           // x=0, y=0
-      expect(pixels[1]).toBe(1);           // x=1, y=0
-      expect(pixels[16]).toBe(16);         // x=0, y=1
+      expect(pixels[0]).toBe(0);
+      expect(pixels[1]).toBe(1);
+      expect(pixels[16]).toBe(16);
     });
 
     it("preserves pixel data in round-trip (deflate)", async () => {
@@ -249,13 +248,82 @@ describe("toOmeTiff", () => {
     });
   });
 
+  describe("tiled output", () => {
+    it("writes tiled TIFF for large images", async () => {
+      const ms = await create2DMultiscales(512, 512, "uint8");
+      const buffer = await toOmeTiff(ms, { compression: "none", tileSize: 256 });
+
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      expect(image.getWidth()).toBe(512);
+      expect(image.getHeight()).toBe(512);
+      expect(image.getTileWidth()).toBe(256);
+      expect(image.getTileHeight()).toBe(256);
+    });
+
+    it("preserves pixel data with tiled output", async () => {
+      const ms = await create2DMultiscales(512, 512, "uint16");
+      const buffer = await toOmeTiff(ms, { compression: "none", tileSize: 256 });
+
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      const rasters = await image.readRasters();
+      const pixels = rasters[0] as Uint16Array;
+      expect(pixels.length).toBe(512 * 512);
+      expect(pixels[0]).toBe(0);
+      expect(pixels[1]).toBe(1);
+      expect(pixels[512]).toBe(512); // x=0, y=1
+    });
+
+    it("handles non-tile-aligned dimensions", async () => {
+      const ms = await create2DMultiscales(300, 200, "uint16");
+      const buffer = await toOmeTiff(ms, { compression: "none", tileSize: 256 });
+
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      expect(image.getWidth()).toBe(300);
+      expect(image.getHeight()).toBe(200);
+
+      const rasters = await image.readRasters();
+      const pixels = rasters[0] as Uint16Array;
+      expect(pixels.length).toBe(300 * 200);
+      expect(pixels[0]).toBe(0);
+      expect(pixels[1]).toBe(1);
+    });
+
+    it("tiled output with deflate compression round-trips", async () => {
+      const ms = await create2DMultiscales(512, 512, "uint16");
+      const buffer = await toOmeTiff(ms, { compression: "deflate", tileSize: 256 });
+
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      expect(image.fileDirectory.getValue("Compression")).toBe(8);
+      expect(image.getTileWidth()).toBe(256);
+
+      const rasters = await image.readRasters();
+      const pixels = rasters[0] as Uint16Array;
+      expect(pixels[0]).toBe(0);
+      expect(pixels[1]).toBe(1);
+    });
+
+    it("uses strip layout when tileSize=0", async () => {
+      const ms = await create2DMultiscales(16, 16);
+      const buffer = await toOmeTiff(ms, { compression: "none", tileSize: 0 });
+
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      expect(image.getWidth()).toBe(16);
+      // No tile tags present — it's a strip-based image
+      expect(image.fileDirectory.getValue("TileWidth")).toBeUndefined();
+    });
+  });
+
   describe("multi-channel", () => {
     it("writes multiple IFDs for multi-channel image", async () => {
       const ms = await create5DMultiscales(1, 3, 1, 8, 8);
       const buffer = await toOmeTiff(ms, { compression: "none" });
 
       const tiff = await fromArrayBuffer(buffer);
-      // Should have 3 IFDs (one per channel)
       const img0 = await tiff.getImage(0);
       const img1 = await tiff.getImage(1);
       const img2 = await tiff.getImage(2);
@@ -282,7 +350,6 @@ describe("toOmeTiff", () => {
       const buffer = await toOmeTiff(ms, { compression: "none" });
 
       const tiff = await fromArrayBuffer(buffer);
-      // 4 Z slices * 1 C * 1 T = 4 IFDs
       for (let i = 0; i < 4; i++) {
         const img = await tiff.getImage(i);
         expect(img.getWidth()).toBe(8);
@@ -296,7 +363,6 @@ describe("toOmeTiff", () => {
       const buffer = await toOmeTiff(ms, { compression: "none" });
 
       const tiff = await fromArrayBuffer(buffer);
-      // 2T * 2C * 3Z = 12 IFDs
       const totalPlanes = 2 * 2 * 3;
       for (let i = 0; i < totalPlanes; i++) {
         const img = await tiff.getImage(i);
@@ -316,7 +382,6 @@ describe("toOmeTiff", () => {
       expect(image.getWidth()).toBe(32);
       expect(image.getHeight()).toBe(32);
 
-      // Should have SubIFDs
       const subIfdOffsets = image.fileDirectory.getValue("SubIFDs");
       expect(subIfdOffsets).toBeDefined();
       expect(subIfdOffsets!.length).toBe(1);
@@ -329,12 +394,11 @@ describe("toOmeTiff", () => {
       const tiff = await fromArrayBuffer(buffer);
       const image = await tiff.getImage(0);
 
-      // Full-res pixels
       const rasters = await image.readRasters();
       const pixels = rasters[0] as Uint16Array;
       expect(pixels.length).toBe(16 * 16);
-      expect(pixels[0]).toBe(0);  // x=0, y=0 => 0+0
-      expect(pixels[1]).toBe(1);  // x=1, y=0 => 1+0
+      expect(pixels[0]).toBe(0);
+      expect(pixels[1]).toBe(1);
     });
   });
 
@@ -363,6 +427,76 @@ describe("toOmeTiff", () => {
     });
   });
 
+  describe("concurrency", () => {
+    it("concurrency=1 produces same output as default", async () => {
+      const ms = await create5DMultiscales(1, 2, 2, 8, 8);
+      const buf1 = await toOmeTiff(ms, { compression: "none", concurrency: 1 });
+      const buf4 = await toOmeTiff(ms, { compression: "none", concurrency: 4 });
+
+      // Same file size
+      expect(buf1.byteLength).toBe(buf4.byteLength);
+
+      // Same pixel data in every IFD
+      const tiff1 = await fromArrayBuffer(buf1);
+      const tiff4 = await fromArrayBuffer(buf4);
+      for (let i = 0; i < 4; i++) {
+        const r1 = await (await tiff1.getImage(i)).readRasters();
+        const r4 = await (await tiff4.getImage(i)).readRasters();
+        expect(r1[0]).toEqual(r4[0]);
+      }
+    });
+
+    it("concurrency=8 works with many planes", async () => {
+      const ms = await create5DMultiscales(2, 2, 2, 8, 8);
+      const buffer = await toOmeTiff(ms, { compression: "none", concurrency: 8 });
+
+      const tiff = await fromArrayBuffer(buffer);
+      // 2T * 2C * 2Z = 8 IFDs
+      for (let i = 0; i < 8; i++) {
+        const img = await tiff.getImage(i);
+        expect(img.getWidth()).toBe(8);
+      }
+    });
+  });
+
+  describe("BigTIFF format", () => {
+    it("produces BigTIFF when format=bigtiff", async () => {
+      const ms = await create2DMultiscales(16, 16);
+      const buffer = await toOmeTiff(ms, { compression: "none", format: "bigtiff" });
+
+      const view = new DataView(buffer);
+      expect(view.getUint16(2, true)).toBe(43); // BigTIFF magic
+
+      // Still readable by geotiff.js
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      expect(image.getWidth()).toBe(16);
+    });
+
+    it("BigTIFF preserves pixel data", async () => {
+      const ms = await create2DMultiscales(16, 16, "uint16");
+      const buffer = await toOmeTiff(ms, {
+        compression: "deflate",
+        format: "bigtiff",
+      });
+
+      const tiff = await fromArrayBuffer(buffer);
+      const image = await tiff.getImage(0);
+      const rasters = await image.readRasters();
+      const pixels = rasters[0] as Uint16Array;
+      expect(pixels[0]).toBe(0);
+      expect(pixels[1]).toBe(1);
+    });
+
+    it("auto format uses classic TIFF for small files", async () => {
+      const ms = await create2DMultiscales(16, 16);
+      const buffer = await toOmeTiff(ms, { compression: "none", format: "auto" });
+
+      const view = new DataView(buffer);
+      expect(view.getUint16(2, true)).toBe(42); // Classic TIFF
+    });
+  });
+
   describe("TiffStore round-trip", () => {
     it("output is readable by TiffStore", async () => {
       const ms = await create2DMultiscales(16, 16);
@@ -380,7 +514,6 @@ describe("toOmeTiff", () => {
       const store = await TiffStore.fromArrayBuffer(buffer);
       expect(store.dataType).toBe("uint16");
 
-      // Should be able to read the root zarr.json
       const rootJson = await store.get("zarr.json");
       expect(rootJson).toBeDefined();
 
@@ -389,7 +522,7 @@ describe("toOmeTiff", () => {
       expect(root.attributes.ome.multiscales).toBeDefined();
     });
 
-    it("full zarrita round-trip: write → read → get data", async () => {
+    it("full zarrita round-trip: write -> read -> get data", async () => {
       const ms = await create2DMultiscales(16, 16, "uint16");
       const buffer = await toOmeTiff(ms, { compression: "deflate" });
 
@@ -397,7 +530,6 @@ describe("toOmeTiff", () => {
       const group = await zarr.open(store as unknown as zarr.Readable, { kind: "group" });
       const arr = await zarr.open(group.resolve("0"), { kind: "array" });
 
-      // Read the full array
       const result = await zarr.get(arr);
       expect(result.data).toBeDefined();
       expect(result.shape.length).toBeGreaterThanOrEqual(2);

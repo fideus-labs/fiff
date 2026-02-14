@@ -37,8 +37,14 @@
   valid OME-TIFF files with embedded OME-XML metadata
 - 🔻 **Full pyramid support** -- Multi-resolution levels are written as SubIFDs,
   matching the modern OME-TIFF pyramid convention
-- 🗜️ **Deflate compression** -- Optional zlib/deflate compression for smaller
-  files, compatible with all major TIFF readers
+- 🗜️ **Deflate compression** -- Async zlib/deflate via native `CompressionStream`
+  (non-blocking) with synchronous pako fallback
+- 🧱 **Tiled output** -- Large images are automatically written as 256x256 tiles
+  (configurable), the OME-TIFF recommended format for efficient random access
+- ⚡ **Parallel plane reading** -- Planes are read with bounded concurrency
+  (configurable) for faster writes from async data sources
+- 💾 **BigTIFF support** -- Automatic 64-bit offset format when files exceed
+  4 GB, with manual override via `format` option
 - 📐 **5D support** -- Handles all dimension orders (XYZCT, XYZTC, etc.) and
   arbitrary combinations of T, C, Z, Y, X axes
 
@@ -176,6 +182,9 @@ const buffer = await toOmeTiff(multiscales, {
   dimensionOrder: "XYZCT", // IFD layout order, default "XYZCT"
   imageName: "my-image",   // name in OME-XML metadata
   creator: "my-app",       // creator string in OME-XML
+  tileSize: 256,           // tile size in px (0 = strip-based), default 256
+  concurrency: 4,          // parallel plane reads, default 4
+  format: "auto",          // "auto" | "classic" | "bigtiff", default "auto"
 });
 ```
 
@@ -259,13 +268,16 @@ All factory methods accept an optional `TiffStoreOptions` object:
 
 ### WriteOptions
 
-| Option             | Type                   | Default     | Description                              |
-| ------------------ | ---------------------- | ----------- | ---------------------------------------- |
-| `compression`      | `"none" \| "deflate"`  | `"deflate"` | Pixel data compression                   |
-| `compressionLevel` | `number`               | `6`         | Deflate level 1-9 (higher = smaller)     |
-| `dimensionOrder`   | `string`               | `"XYZCT"`   | IFD plane layout order                   |
-| `imageName`        | `string`               | `"image"`   | Image name in OME-XML                    |
-| `creator`          | `string`               | `"fiff"`    | Creator string in OME-XML                |
+| Option             | Type                                   | Default     | Description                               |
+| ------------------ | -------------------------------------- | ----------- | ----------------------------------------- |
+| `compression`      | `"none" \| "deflate"`                  | `"deflate"` | Pixel data compression                    |
+| `compressionLevel` | `number`                               | `6`         | Deflate level 1-9 (higher = smaller)      |
+| `dimensionOrder`   | `string`                               | `"XYZCT"`   | IFD plane layout order                    |
+| `imageName`        | `string`                               | `"image"`   | Image name in OME-XML                     |
+| `creator`          | `string`                               | `"fiff"`    | Creator string in OME-XML                 |
+| `tileSize`         | `number`                               | `256`       | Tile size (0 = strip-based, must be x16)  |
+| `concurrency`      | `number`                               | `4`         | Max parallel plane reads                  |
+| `format`           | `"auto" \| "classic" \| "bigtiff"`     | `"auto"`    | TIFF format (auto-detects BigTIFF > 4 GB) |
 
 ## 🛠️ Development
 
@@ -298,7 +310,7 @@ src/
   ome-xml-writer.ts # OME-XML generation from Multiscales metadata
 test/
   fixtures.ts       # Test TIFF generation helpers
-  *.test.ts         # 175 tests across 11 files
+  *.test.ts         # 201 tests across 11 files
 ```
 
 ### 📝 Commands

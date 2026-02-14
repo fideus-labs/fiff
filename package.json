@@ -44,7 +44,7 @@
     "zarrita": "^0.6.1"
   },
   "devDependencies": {
-    "@fideus-labs/ngff-zarr": "file:/home/matt/src/ngff-zarr/ts/npm",
+    "@fideus-labs/ngff-zarr": "^0.8.0",
     "@types/bun": "^1.2.15",
     "typescript": "^5.9.3"
   }

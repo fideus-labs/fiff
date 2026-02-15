@@ -24,7 +24,7 @@ export function createSimpleTiff(): ArrayBuffer {
     }
   }
 
-  return writeArrayBuffer(values, {
+  return writeArrayBuffer(values as any, {
     width,
     height,
     BitsPerSample: [8],
@@ -52,7 +52,7 @@ export function createUint16Tiff(): ArrayBuffer {
     }
   }
 
-  return writeArrayBuffer(values, {
+  return writeArrayBuffer(values as any, {
     width,
     height,
     BitsPerSample: [16],
@@ -134,7 +134,7 @@ export function createSinglePlaneOmeTiff(
 
   const omeXml = createOmeTiffXml(width, height, 1, 1, 1, "uint16", 0.5, 0.5);
 
-  return writeArrayBuffer(values, {
+  return writeArrayBuffer(values as any, {
     width,
     height,
     BitsPerSample: [16],
@@ -159,7 +159,7 @@ export function createFloat32Tiff(): ArrayBuffer {
     }
   }
 
-  return writeArrayBuffer(values, {
+  return writeArrayBuffer(values as any, {
     width,
     height,
     BitsPerSample: [32],

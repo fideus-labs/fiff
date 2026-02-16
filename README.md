@@ -119,6 +119,28 @@ store.ome;            // parsed OME-XML image metadata (if present)
 store.pyramidInfo;    // pyramid structure details
 ```
 
+### Reading: Load a Multiscales from a TiffStore
+
+`TiffStore` implements the zarrita `Readable` interface, so it can be passed
+directly to ngff-zarr's `fromNgffZarr` to obtain a `Multiscales` object:
+
+```typescript
+import { TiffStore } from "@fideus-labs/fiff";
+import { fromNgffZarr } from "@fideus-labs/ngff-zarr";
+
+const store = await TiffStore.fromUrl("https://example.com/image.ome.tif");
+const multiscales = await fromNgffZarr(store, { version: "0.5" });
+
+const image = multiscales.images[0];
+console.log(image.dims);        // e.g. ["t", "c", "z", "y", "x"]
+console.log(image.data.shape);  // e.g. [1, 3, 1, 512, 512]
+console.log(image.data.dtype);  // e.g. "uint16"
+console.log(image.scale);       // e.g. { t: 1, c: 1, z: 1, y: 0.5, x: 0.5 }
+
+console.log(multiscales.metadata.axes);     // axis definitions
+console.log(multiscales.metadata.datasets); // dataset paths and transforms
+```
+
 ### Writing: Convert ngff-zarr Multiscales to OME-TIFF
 
 `toOmeTiff()` takes an ngff-zarr `Multiscales` object and returns a complete

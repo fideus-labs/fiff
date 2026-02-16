@@ -62,3 +62,15 @@ export {
   type TiffDtypeInfo,
 } from "./dtypes.js";
 export { parseStoreKey, computePixelWindow } from "./utils.js";
+
+// Worker pool integration
+export {
+  getDeflateWorkerUrl,
+  type DeflatePool,
+} from "./worker-utils.js";
+export {
+  WorkerDeflateDecoder,
+  registerWorkerDecoder,
+  unregisterWorkerDecoder,
+} from "./worker-decoder.js";
+export { DEFLATE_WORKER_SOURCE } from "./deflate-worker.js";

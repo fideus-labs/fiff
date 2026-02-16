@@ -30,6 +30,7 @@
  */
 
 import { deflate } from "pako";
+import { compressTilesOnPool, type DeflatePool } from "./worker-utils.js";
 
 // ── TIFF constants ──────────────────────────────────────────────────
 
@@ -117,6 +118,22 @@ export interface BuildTiffOptions {
    * Default: "auto".
    */
   format?: "auto" | "classic" | "bigtiff";
+  /**
+   * Optional worker pool for offloading deflate compression to Web Workers.
+   *
+   * When provided and compression is "deflate" with the default level (6),
+   * tile compression uses CompressionStream on pool workers — releasing the
+   * main thread entirely.
+   *
+   * When not provided (or for non-default compression levels), falls back
+   * to the existing main-thread path (CompressionStream -> pako).
+   *
+   * Accepts any object matching the `DeflatePool` interface from
+   * `@fideus-labs/worker-pool`.
+   */
+  pool?: import("./worker-utils.js").DeflatePool;
+  /** Custom worker script URL. Only used when `pool` is provided. */
+  workerUrl?: string;
 }
 
 // ── Internal types ──────────────────────────────────────────────────
@@ -201,10 +218,12 @@ export async function buildTiff(
   const compression = options.compression ?? "none";
   const compressionLevel = options.compressionLevel ?? 6;
   const formatOpt = options.format ?? "auto";
+  const pool = options.pool;
+  const workerUrl = options.workerUrl;
 
   // Phase 1: Compress tiles eagerly (compress-and-release)
   const processedIfds = await Promise.all(
-    ifds.map((ifd) => processIfdAsync(ifd, compression, compressionLevel)),
+    ifds.map((ifd) => processIfdAsync(ifd, compression, compressionLevel, pool, workerUrl)),
   );
 
   // Phase 2: Determine format (auto-detect BigTIFF if needed)
@@ -314,20 +333,32 @@ export function compressDeflate(
  *
  * This is the "compress-and-release" step: after compression, the
  * original uncompressed tile data can be GC'd.
+ *
+ * When a `pool` is provided and the compression level is the default (6),
+ * tiles are compressed on Web Workers via CompressionStream, fully
+ * releasing the main thread. Otherwise falls back to the main-thread
+ * path (CompressionStream -> pako).
  */
 async function processIfdAsync(
   ifd: WritableIfd,
   compression: "none" | "deflate",
   level: number,
+  pool?: DeflatePool,
+  workerUrl?: string,
 ): Promise<WritableIfd> {
   let tiles = ifd.tiles;
   const tags = [...ifd.tags];
 
   if (compression === "deflate") {
-    // Compress all tiles in parallel
-    tiles = await Promise.all(
-      tiles.map((t) => compressDeflateAsync(t, level)),
-    );
+    if (pool && level === 6) {
+      // Offload compression to worker pool (CompressionStream on workers)
+      tiles = await compressTilesOnPool(tiles, pool, workerUrl);
+    } else {
+      // Main-thread path: CompressionStream (async) -> pako (sync fallback)
+      tiles = await Promise.all(
+        tiles.map((t) => compressDeflateAsync(t, level)),
+      );
+    }
     // Replace or add Compression tag
     const compIdx = tags.findIndex((t) => t.tag === TAG_COMPRESSION);
     if (compIdx >= 0) {
@@ -338,7 +369,7 @@ async function processIfdAsync(
   }
 
   const subIfds = ifd.subIfds
-    ? await Promise.all(ifd.subIfds.map((sub) => processIfdAsync(sub, compression, level)))
+    ? await Promise.all(ifd.subIfds.map((sub) => processIfdAsync(sub, compression, level, pool, workerUrl)))
     : undefined;
 
   return { tags, tiles, subIfds };

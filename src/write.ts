@@ -95,6 +95,23 @@ export interface WriteOptions {
    * Default: "auto".
    */
   format?: "auto" | "classic" | "bigtiff";
+
+  /**
+   * Optional worker pool for offloading deflate compression to Web Workers.
+   *
+   * When provided and compression is "deflate" with the default level (6),
+   * tile compression uses CompressionStream on pool workers — releasing the
+   * main thread entirely.
+   *
+   * When not provided (or for non-default compression levels), falls back
+   * to the existing main-thread path (CompressionStream -> pako).
+   *
+   * Accepts any object matching the `DeflatePool` interface from
+   * `@fideus-labs/worker-pool`.
+   */
+  pool?: import("./worker-utils.js").DeflatePool;
+  /** Custom worker script URL. Only used when `pool` is provided. */
+  workerUrl?: string;
 }
 
 /**
@@ -201,7 +218,13 @@ export async function toOmeTiff(
     await Promise.all(batch);
   }
 
-  return buildTiff(mainIfds, { compression, compressionLevel, format });
+  return buildTiff(mainIfds, {
+    compression,
+    compressionLevel,
+    format,
+    pool: options.pool,
+    workerUrl: options.workerUrl,
+  });
 }
 
 // ── Internal helpers ────────────────────────────────────────────────

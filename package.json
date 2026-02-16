@@ -45,10 +45,14 @@
     "zarrita": "^0.6.1"
   },
   "peerDependencies": {
-    "@fideus-labs/ngff-zarr": "^0.11.0"
+    "@fideus-labs/ngff-zarr": "^0.11.0",
+    "@fideus-labs/worker-pool": "^0.1.0"
   },
   "peerDependenciesMeta": {
     "@fideus-labs/ngff-zarr": {
+      "optional": true
+    },
+    "@fideus-labs/worker-pool": {
       "optional": true
     }
   },

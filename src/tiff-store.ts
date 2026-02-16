@@ -48,6 +48,23 @@ export interface TiffStoreOptions {
   offsets?: number[];
   /** Additional HTTP headers for remote TIFF requests. */
   headers?: Record<string, string>;
+  /**
+   * Optional worker pool for offloading deflate decompression to Web Workers.
+   *
+   * When provided, replaces geotiff's built-in pako-based deflate decoder
+   * with a DecompressionStream-based decoder running on pool workers.
+   *
+   * **Note:** This registration is global — it affects all geotiff
+   * instances in the current context, not just this TiffStore.
+   *
+   * When not provided, geotiff uses its default decoder (pako).
+   *
+   * Accepts any object matching the `DeflatePool` interface from
+   * `@fideus-labs/worker-pool`.
+   */
+  pool?: import("./worker-utils.js").DeflatePool;
+  /** Custom worker script URL. Only used when `pool` is provided. */
+  workerUrl?: string;
 }
 
 /**
@@ -151,6 +168,13 @@ export class TiffStore {
     tiff: GeoTIFF,
     options: TiffStoreOptions = {},
   ): Promise<TiffStore> {
+    // Register worker-backed deflate decoder when a pool is provided.
+    // This is a global registration — it affects all geotiff instances.
+    if (options.pool) {
+      const { registerWorkerDecoder } = await import("./worker-decoder.js");
+      registerWorkerDecoder(options.pool, options.workerUrl);
+    }
+
     const firstImage = await tiff.getImage(0);
 
     // Try to parse OME-XML from the ImageDescription tag

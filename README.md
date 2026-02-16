@@ -39,6 +39,9 @@
   matching the modern OME-TIFF pyramid convention
 - 🗜️ **Deflate compression** -- Async zlib/deflate via native `CompressionStream`
   (non-blocking) with synchronous pako fallback
+- 🧵 **Worker pool support** -- Optional `@fideus-labs/worker-pool` integration
+  offloads compression and decompression to Web Workers, fully releasing the
+  main thread
 - 🧱 **Tiled output** -- Large images are automatically written as 256x256 tiles
   (configurable), the OME-TIFF recommended format for efficient random access
 - ⚡ **Parallel plane reading** -- Planes are read with bounded concurrency
@@ -58,6 +61,12 @@ For write support, also install the optional peer dependency:
 
 ```bash
 npm install @fideus-labs/ngff-zarr
+```
+
+For worker pool support (offloading compression/decompression to Web Workers):
+
+```bash
+npm install @fideus-labs/worker-pool
 ```
 
 ## ⚡ Usage
@@ -210,6 +219,79 @@ const buffer = await toOmeTiff(multiscales, {
 });
 ```
 
+### Worker Pool: Offloading Compression to Web Workers
+
+By passing a `@fideus-labs/worker-pool` instance, deflate compression (writes)
+and decompression (reads) run on Web Workers using the standard
+`CompressionStream` / `DecompressionStream` APIs — fully releasing the main
+thread.
+
+#### Writing with a worker pool
+
+```typescript
+import { toOmeTiff } from "@fideus-labs/fiff";
+import WorkerPool from "@fideus-labs/worker-pool";
+
+const pool = new WorkerPool(navigator.hardwareConcurrency ?? 4);
+
+const buffer = await toOmeTiff(multiscales, {
+  pool,              // tiles are compressed on workers
+  compression: "deflate",
+});
+
+pool.terminateWorkers();
+```
+
+#### Reading with a worker pool
+
+```typescript
+import { TiffStore } from "@fideus-labs/fiff";
+import WorkerPool from "@fideus-labs/worker-pool";
+
+const pool = new WorkerPool(4);
+
+// Registers a worker-backed deflate decoder with geotiff.js.
+// This is a global registration — it affects all geotiff instances.
+const store = await TiffStore.fromUrl(
+  "https://example.com/image.ome.tif",
+  { pool },
+);
+
+// All subsequent chunk reads decompress on workers
+const group = await zarr.open(store as unknown as zarr.Readable, { kind: "group" });
+const arr = await zarr.open(group.resolve("0"), { kind: "array" });
+const chunk = await zarr.get(arr);
+
+pool.terminateWorkers();
+```
+
+#### Low-level: buildTiff with a pool
+
+```typescript
+import { buildTiff, type WritableIfd } from "@fideus-labs/fiff";
+import WorkerPool from "@fideus-labs/worker-pool";
+
+const pool = new WorkerPool(4);
+const ifds: WritableIfd[] = [/* ... */];
+
+const buffer = await buildTiff(ifds, {
+  compression: "deflate",
+  pool,
+});
+
+pool.terminateWorkers();
+```
+
+#### How it works
+
+- Workers use `CompressionStream("deflate")` / `DecompressionStream("deflate")`
+  -- no pako or other dependencies inside the worker
+- The worker script is inlined as a blob URL at runtime (no separate file to serve)
+- ArrayBuffers are transferred (zero-copy) between the main thread and workers
+- When the compression level is not the default (6), or no pool is provided,
+  fiff falls back to the existing main-thread path (CompressionStream -> pako)
+- The pool's bounded concurrency replaces unbounded `Promise.all` over tiles
+
 #### Multi-resolution pyramids
 
 When the `Multiscales` object contains multiple images (resolution levels),
@@ -260,10 +342,12 @@ const result = await zarr.get(arr);
 
 All factory methods accept an optional `TiffStoreOptions` object:
 
-| Option    | Type                     | Default     | Description                                     |
-| --------- | ------------------------ | ----------- | ----------------------------------------------- |
-| `offsets` | `number[]`               | `undefined` | Pre-computed IFD byte offsets for O(1) access   |
-| `headers` | `Record<string, string>` | `undefined` | Additional HTTP headers for remote TIFF requests |
+| Option      | Type                     | Default     | Description                                                                  |
+| ----------- | ------------------------ | ----------- | ---------------------------------------------------------------------------- |
+| `offsets`   | `number[]`               | `undefined` | Pre-computed IFD byte offsets for O(1) access                                |
+| `headers`   | `Record<string, string>` | `undefined` | Additional HTTP headers for remote TIFF requests                             |
+| `pool`      | `DeflatePool`            | `undefined` | Worker pool for offloading decompression (global geotiff decoder override)   |
+| `workerUrl` | `string`                 | `undefined` | Custom worker script URL (only used when `pool` is provided)                 |
 
 ### Public Accessors
 
@@ -290,16 +374,18 @@ All factory methods accept an optional `TiffStoreOptions` object:
 
 ### WriteOptions
 
-| Option             | Type                                   | Default     | Description                               |
-| ------------------ | -------------------------------------- | ----------- | ----------------------------------------- |
-| `compression`      | `"none" \| "deflate"`                  | `"deflate"` | Pixel data compression                    |
-| `compressionLevel` | `number`                               | `6`         | Deflate level 1-9 (higher = smaller)      |
-| `dimensionOrder`   | `string`                               | `"XYZCT"`   | IFD plane layout order                    |
-| `imageName`        | `string`                               | `"image"`   | Image name in OME-XML                     |
-| `creator`          | `string`                               | `"fiff"`    | Creator string in OME-XML                 |
-| `tileSize`         | `number`                               | `256`       | Tile size (0 = strip-based, must be x16)  |
-| `concurrency`      | `number`                               | `4`         | Max parallel plane reads                  |
-| `format`           | `"auto" \| "classic" \| "bigtiff"`     | `"auto"`    | TIFF format (auto-detects BigTIFF > 4 GB) |
+| Option             | Type                                   | Default     | Description                                                                     |
+| ------------------ | -------------------------------------- | ----------- | ------------------------------------------------------------------------------- |
+| `compression`      | `"none" \| "deflate"`                  | `"deflate"` | Pixel data compression                                                          |
+| `compressionLevel` | `number`                               | `6`         | Deflate level 1-9 (higher = smaller)                                            |
+| `dimensionOrder`   | `string`                               | `"XYZCT"`   | IFD plane layout order                                                          |
+| `imageName`        | `string`                               | `"image"`   | Image name in OME-XML                                                           |
+| `creator`          | `string`                               | `"fiff"`    | Creator string in OME-XML                                                       |
+| `tileSize`         | `number`                               | `256`       | Tile size (0 = strip-based, must be x16)                                        |
+| `concurrency`      | `number`                               | `4`         | Max parallel plane reads                                                        |
+| `format`           | `"auto" \| "classic" \| "bigtiff"`     | `"auto"`    | TIFF format (auto-detects BigTIFF > 4 GB)                                       |
+| `pool`             | `DeflatePool`                          | `undefined` | Worker pool for offloading deflate compression to Web Workers                   |
+| `workerUrl`        | `string`                               | `undefined` | Custom worker script URL (only used when `pool` is provided)                    |
 
 ## 🛠️ Development
 
@@ -319,20 +405,23 @@ bun install
 
 ```
 src/
-  index.ts          # Public API exports
-  tiff-store.ts     # TiffStore class (AsyncReadable implementation)
-  metadata.ts       # Zarr v3 / OME-Zarr 0.5 metadata synthesis
-  ome-xml.ts        # OME-XML parser (dimensions, channels, DimensionOrder)
-  ifd-indexer.ts    # IFD-to-pyramid-level mapping (SubIFD/legacy/COG)
-  chunk-reader.ts   # Pixel data reading via geotiff.js readRasters
-  dtypes.ts         # TIFF ↔ Zarr data_type mapping
-  utils.ts          # Key parsing, pixel window computation, encoding
-  write.ts          # High-level toOmeTiff() writer
-  tiff-writer.ts    # Low-level TIFF binary builder (IFDs, SubIFDs, deflate)
-  ome-xml-writer.ts # OME-XML generation from Multiscales metadata
+  index.ts           # Public API exports
+  tiff-store.ts      # TiffStore class (AsyncReadable implementation)
+  metadata.ts        # Zarr v3 / OME-Zarr 0.5 metadata synthesis
+  ome-xml.ts         # OME-XML parser (dimensions, channels, DimensionOrder)
+  ifd-indexer.ts     # IFD-to-pyramid-level mapping (SubIFD/legacy/COG)
+  chunk-reader.ts    # Pixel data reading via geotiff.js readRasters
+  dtypes.ts          # TIFF ↔ Zarr data_type mapping
+  utils.ts           # Key parsing, pixel window computation, encoding
+  write.ts           # High-level toOmeTiff() writer
+  tiff-writer.ts     # Low-level TIFF binary builder (IFDs, SubIFDs, deflate)
+  ome-xml-writer.ts  # OME-XML generation from Multiscales metadata
+  deflate-worker.ts  # Inline Web Worker source for compress/decompress
+  worker-utils.ts    # Worker pool task factories and blob URL helper
+  worker-decoder.ts  # Worker-backed geotiff deflate decoder
 test/
-  fixtures.ts       # Test TIFF generation helpers
-  *.test.ts         # 201 tests across 11 files
+  fixtures.ts        # Test TIFF generation helpers
+  *.test.ts          # 201 tests across 11 files
 ```
 
 ### 📝 Commands

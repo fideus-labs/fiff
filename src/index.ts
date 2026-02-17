@@ -19,58 +19,63 @@
  * ```
  */
 
-export { TiffStore, type TiffStoreOptions } from "./tiff-store.js";
-
+export { DEFLATE_WORKER_SOURCE } from "./deflate-worker.js"
 // Re-export types that consumers may need
-export type { ZarrDataType } from "./dtypes.js";
-export type { OmeImage, OmePixels, OmeChannel, DimensionOrder } from "./ome-xml.js";
-export type { PyramidInfo, PlaneSelection } from "./ifd-indexer.js";
+export type { ZarrDataType } from "./dtypes.js"
+export {
+  bytesPerElement,
+  omePixelTypeToZarr,
+  type TiffDtypeInfo,
+  tiffDtypeToZarr,
+  zarrToOmePixelType,
+  zarrToTiffDtype,
+} from "./dtypes.js"
+export type { PlaneSelection, PyramidInfo } from "./ifd-indexer.js"
 export type {
   OmeAxis,
-  OmeMultiscale,
-  OmeDataset,
   OmeCoordinateTransformation,
-  OmeroMetadata,
+  OmeDataset,
+  OmeMultiscale,
   OmeroChannel,
-  ZarrGroupMetadata,
+  OmeroMetadata,
   ZarrArrayMetadata,
-} from "./metadata.js";
-
-// Writer
-export { toOmeTiff, type WriteOptions } from "./write.js";
-export { buildOmeXml, type OmeXmlWriterOptions, type DimensionInfo } from "./ome-xml-writer.js";
+  ZarrGroupMetadata,
+} from "./metadata.js"
+export type {
+  DimensionOrder,
+  OmeChannel,
+  OmeImage,
+  OmePixels,
+} from "./ome-xml.js"
+// Export utilities that may be useful
+export { getIfdIndex, isOmeXml, parseOmeXml } from "./ome-xml.js"
 export {
+  buildOmeXml,
+  type DimensionInfo,
+  type OmeXmlWriterOptions,
+} from "./ome-xml-writer.js"
+export { TiffStore, type TiffStoreOptions } from "./tiff-store.js"
+export {
+  type BuildTiffOptions,
   buildTiff,
-  makeImageTags,
-  sliceTiles,
   compressDeflate,
   compressDeflateAsync,
   DEFAULT_TILE_SIZE,
-  type WritableIfd,
+  makeImageTags,
+  sliceTiles,
   type TiffTag,
-  type BuildTiffOptions,
-} from "./tiff-writer.js";
-
-// Export utilities that may be useful
-export { parseOmeXml, isOmeXml, getIfdIndex } from "./ome-xml.js";
+  type WritableIfd,
+} from "./tiff-writer.js"
+export { computePixelWindow, parseStoreKey } from "./utils.js"
 export {
-  tiffDtypeToZarr,
-  omePixelTypeToZarr,
-  zarrToOmePixelType,
-  zarrToTiffDtype,
-  bytesPerElement,
-  type TiffDtypeInfo,
-} from "./dtypes.js";
-export { parseStoreKey, computePixelWindow } from "./utils.js";
-
-// Worker pool integration
-export {
-  getDeflateWorkerUrl,
-  type DeflatePool,
-} from "./worker-utils.js";
-export {
-  WorkerDeflateDecoder,
   registerWorkerDecoder,
   unregisterWorkerDecoder,
-} from "./worker-decoder.js";
-export { DEFLATE_WORKER_SOURCE } from "./deflate-worker.js";
+  WorkerDeflateDecoder,
+} from "./worker-decoder.js"
+// Worker pool integration
+export {
+  type DeflatePool,
+  getDeflateWorkerUrl,
+} from "./worker-utils.js"
+// Writer
+export { type GetPlane, toOmeTiff, type WriteOptions } from "./write.js"

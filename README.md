@@ -50,6 +50,9 @@
   4 GB, with manual override via `format` option
 - 📐 **5D support** -- Handles all dimension orders (XYZCT, XYZTC, etc.) and
   arbitrary combinations of T, C, Z, Y, X axes
+- 🔌 **Custom plane reader** -- Pluggable `getPlane` callback replaces the
+  internal `zarr.get()`, enabling worker-pool decompression or zero-copy reads
+  from uncompressed zarr arrays
 
 ## 📦 Installation
 
@@ -216,6 +219,7 @@ const buffer = await toOmeTiff(multiscales, {
   tileSize: 256,           // tile size in px (0 = strip-based), default 256
   concurrency: 4,          // parallel plane reads, default 4
   format: "auto",          // "auto" | "classic" | "bigtiff", default "auto"
+  getPlane: zarrGet,       // custom plane reader (e.g. ngff-zarr's zarrGet)
 });
 ```
 
@@ -280,6 +284,44 @@ const buffer = await buildTiff(ifds, {
 });
 
 pool.terminateWorkers();
+```
+
+### Custom Plane Reader (`getPlane`)
+
+By default `toOmeTiff()` reads each (C, Z, T) plane with the built-in
+`zarr.get()`. You can replace this with a custom callback via the `getPlane`
+option. This is useful for:
+
+- **Offloading decompression** -- ngff-zarr's `zarrGet` runs blosc
+  decompression on a worker pool instead of the main thread.
+- **Skipping decompression entirely** -- When the in-memory zarr arrays were
+  created with `bytesOnlyCodecs()` (no compression), reads are a trivial
+  memcpy with zero overhead.
+
+```typescript
+import { toOmeTiff } from "@fideus-labs/fiff"
+import { bytesOnlyCodecs, toMultiscales, zarrGet } from "@fideus-labs/ngff-zarr"
+
+// Create multiscales with no compression (OME-TIFF will re-compress with deflate)
+const multiscales = await toMultiscales(ngffImage, {
+  method: Methods.ITKWASM_GAUSSIAN,
+  codecs: bytesOnlyCodecs(),
+})
+
+// Write OME-TIFF using zarrGet to read planes (worker-pool-aware)
+const buffer = await toOmeTiff(multiscales, {
+  compression: "deflate",
+  getPlane: zarrGet,
+})
+```
+
+The `GetPlane` callback type mirrors `zarr.get()`:
+
+```typescript
+type GetPlane = (
+  data: zarr.Array<zarr.DataType, zarr.Readable>,
+  selection: (number | null)[],
+) => Promise<{ data: ArrayLike<number> }>
 ```
 
 #### How it works
@@ -386,6 +428,7 @@ All factory methods accept an optional `TiffStoreOptions` object:
 | `format`           | `"auto" \| "classic" \| "bigtiff"`     | `"auto"`    | TIFF format (auto-detects BigTIFF > 4 GB)                                       |
 | `pool`             | `DeflatePool`                          | `undefined` | Worker pool for offloading deflate compression to Web Workers                   |
 | `workerUrl`        | `string`                               | `undefined` | Custom worker script URL (only used when `pool` is provided)                    |
+| `getPlane`         | `GetPlane`                             | `undefined` | Custom plane reader replacing the internal `zarr.get()` call (see below)        |
 
 ## 🛠️ Development
 

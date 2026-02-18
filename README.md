@@ -321,7 +321,7 @@ The `GetPlane` callback type mirrors `zarr.get()`:
 type GetPlane = (
   data: zarr.Array<zarr.DataType, zarr.Readable>,
   selection: (number | null)[],
-) => Promise<{ data: ArrayLike<unknown> }>
+) => Promise<{ data: unknown }>
 ```
 
 #### How it works

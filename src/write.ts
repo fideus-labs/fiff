@@ -33,12 +33,17 @@ import type { OmePixels } from "./ome-xml.js"
  * array and a per-dimension selection, and must return an object whose
  * `.data` property is a typed array of pixel values.
  *
+ * The return type uses `ArrayLike<unknown>` so that zarrita's
+ * `Chunk<DataType>` (whose `.data` may be `Array<string>` for string
+ * dtypes at the type level) is assignable here.  In practice only
+ * numeric typed arrays are valid — fiff casts `.data` internally.
+ *
  * @see {@link WriteOptions.getPlane}
  */
 export type GetPlane = (
   data: zarr.Array<zarr.DataType, zarr.Readable>,
   selection: (number | null)[],
-) => Promise<{ data: ArrayLike<number> }>
+) => Promise<{ data: ArrayLike<unknown> }>
 
 import type { DimensionInfo } from "./ome-xml-writer.js"
 import { buildOmeXml, extractDimensions } from "./ome-xml-writer.js"

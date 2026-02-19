@@ -43,12 +43,20 @@ export type {
 } from "./metadata.js"
 export type {
   DimensionOrder,
+  FilteredPixels,
   OmeChannel,
   OmeImage,
   OmePixels,
+  TiffDataEntry,
 } from "./ome-xml.js"
 // Export utilities that may be useful
-export { getIfdIndex, isOmeXml, parseOmeXml } from "./ome-xml.js"
+export {
+  filterPixelsForFile,
+  getIfdIndex,
+  isOmeXml,
+  parseOmeXml,
+  parseRootUuid,
+} from "./ome-xml.js"
 export {
   buildOmeXml,
   type DimensionInfo,

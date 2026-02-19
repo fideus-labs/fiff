@@ -1,6 +1,6 @@
 {
   "name": "@fideus-labs/fiff",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Present TIFF files as a zarrita.js Zarr store following the NGFF OME-Zarr data model",
   "type": "module",
   "main": "./dist/index.js",

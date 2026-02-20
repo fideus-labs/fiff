@@ -121,7 +121,7 @@ export interface WriteOptions {
    * main thread entirely.
    *
    * When not provided (or for non-default compression levels), falls back
-   * to the existing main-thread path (CompressionStream -> pako).
+   * to the existing main-thread path (CompressionStream -> fflate).
    *
    * Accepts any object matching the `DeflatePool` interface from
    * `@fideus-labs/worker-pool`.

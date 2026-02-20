@@ -11,7 +11,7 @@
  * Features:
  *   - Tiled output (default 256x256, configurable)
  *   - Deflate compression via CompressionStream (async, non-blocking)
- *     with synchronous pako fallback
+ *     with synchronous fflate fallback
  *   - Automatic BigTIFF when offsets exceed 4 GB
  *   - Compress-and-release: tiles are compressed eagerly, uncompressed
  *     data is released immediately to minimise peak memory
@@ -29,7 +29,7 @@
  *   ...
  */
 
-import { deflate } from "pako";
+import { zlibSync } from "fflate";
 import { compressTilesOnPool, type DeflatePool } from "./worker-utils.js";
 
 // ── TIFF constants ──────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export interface BuildTiffOptions {
    * main thread entirely.
    *
    * When not provided (or for non-default compression levels), falls back
-   * to the existing main-thread path (CompressionStream -> pako).
+   * to the existing main-thread path (CompressionStream -> fflate).
    *
    * Accepts any object matching the `DeflatePool` interface from
    * `@fideus-labs/worker-pool`.
@@ -265,10 +265,10 @@ export async function buildTiff(
 
 /**
  * Compress a Uint8Array using deflate (zlib-wrapped, RFC 1950).
- * Compatible with TIFF compression code 8 and geotiff.js's pako.inflate().
+ * Compatible with TIFF compression code 8 and geotiff.js's inflate.
  *
  * Prefers the native CompressionStream API (async, non-blocking) when
- * available, falling back to synchronous pako.deflate().
+ * available, falling back to synchronous fflate.zlibSync().
  */
 export async function compressDeflateAsync(
   data: Uint8Array,
@@ -278,7 +278,7 @@ export async function compressDeflateAsync(
   // which is what TIFF code 8 expects and what geotiff.js decompresses.
   // However, CompressionStream doesn't support compression level, so we
   // only use it for the default level to avoid surprising behaviour.
-  // For non-default levels, we fall back to pako.
+  // For non-default levels, we fall back to fflate.
   if (
     typeof globalThis.CompressionStream !== "undefined" &&
     level === 6
@@ -316,13 +316,13 @@ export async function compressDeflateAsync(
 
 /**
  * Compress a Uint8Array using deflate (zlib-wrapped, RFC 1950) synchronously.
- * Compatible with TIFF compression code 8 and geotiff.js's pako.inflate().
+ * Compatible with TIFF compression code 8 and geotiff.js's inflate.
  */
 export function compressDeflate(
   data: Uint8Array,
   level: number = 6,
 ): Uint8Array {
-  return deflate(data, { level: level as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 });
+  return zlibSync(data, { level: level as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 });
 }
 
 // ── Internal helpers ────────────────────────────────────────────────
@@ -337,7 +337,7 @@ export function compressDeflate(
  * When a `pool` is provided and the compression level is the default (6),
  * tiles are compressed on Web Workers via CompressionStream, fully
  * releasing the main thread. Otherwise falls back to the main-thread
- * path (CompressionStream -> pako).
+ * path (CompressionStream -> fflate).
  */
 async function processIfdAsync(
   ifd: WritableIfd,
@@ -354,7 +354,7 @@ async function processIfdAsync(
       // Offload compression to worker pool (CompressionStream on workers)
       tiles = await compressTilesOnPool(tiles, pool, workerUrl);
     } else {
-      // Main-thread path: CompressionStream (async) -> pako (sync fallback)
+      // Main-thread path: CompressionStream (async) -> fflate (sync fallback)
       tiles = await Promise.all(
         tiles.map((t) => compressDeflateAsync(t, level)),
       );

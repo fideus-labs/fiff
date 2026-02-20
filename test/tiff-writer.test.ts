@@ -441,15 +441,15 @@ describe("tiff-writer", () => {
       expect(compressed[0]).toBe(0x78);
     });
 
-    it("round-trips through pako inflate", async () => {
-      const { inflate } = await import("pako");
+    it("round-trips through fflate unzlibSync", async () => {
+      const { unzlibSync } = await import("fflate");
       const original = new Uint8Array(1000);
       for (let i = 0; i < original.length; i++) {
         original[i] = i % 256;
       }
 
       const compressed = compressDeflate(original);
-      const decompressed = inflate(compressed);
+      const decompressed = unzlibSync(compressed);
 
       expect(decompressed.length).toBe(original.length);
       expect(decompressed).toEqual(original);
@@ -457,15 +457,15 @@ describe("tiff-writer", () => {
   });
 
   describe("compressDeflateAsync", () => {
-    it("round-trips through pako inflate", async () => {
-      const { inflate } = await import("pako");
+    it("round-trips through fflate unzlibSync", async () => {
+      const { unzlibSync } = await import("fflate");
       const original = new Uint8Array(1000);
       for (let i = 0; i < original.length; i++) {
         original[i] = i % 256;
       }
 
       const compressed = await compressDeflateAsync(original);
-      const decompressed = inflate(compressed);
+      const decompressed = unzlibSync(compressed);
 
       expect(decompressed.length).toBe(original.length);
       expect(decompressed).toEqual(original);

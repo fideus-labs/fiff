@@ -38,7 +38,7 @@
 - 🔻 **Full pyramid support** -- Multi-resolution levels are written as SubIFDs,
   matching the modern OME-TIFF pyramid convention
 - 🗜️ **Deflate compression** -- Async zlib/deflate via native `CompressionStream`
-  (non-blocking) with synchronous pako fallback
+  (non-blocking) with synchronous fflate fallback
 - 🧵 **Worker pool support** -- Optional `@fideus-labs/worker-pool` integration
   offloads compression and decompression to Web Workers, fully releasing the
   main thread
@@ -327,11 +327,11 @@ type GetPlane = (
 #### How it works
 
 - Workers use `CompressionStream("deflate")` / `DecompressionStream("deflate")`
-  -- no pako or other dependencies inside the worker
+  -- no fflate or other dependencies inside the worker
 - The worker script is inlined as a blob URL at runtime (no separate file to serve)
 - ArrayBuffers are transferred (zero-copy) between the main thread and workers
 - When the compression level is not the default (6), or no pool is provided,
-  fiff falls back to the existing main-thread path (CompressionStream -> pako)
+  fiff falls back to the existing main-thread path (CompressionStream -> fflate)
 - The pool's bounded concurrency replaces unbounded `Promise.all` over tiles
 
 #### Multi-resolution pyramids

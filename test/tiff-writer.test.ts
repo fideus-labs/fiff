@@ -121,7 +121,7 @@ describe("tiff-writer", () => {
 
       const tiff = await fromArrayBuffer(buffer);
       const image = await tiff.getImage(0);
-      const desc = image.fileDirectory.getValue("ImageDescription") as string;
+      const desc = (await image.fileDirectory.loadValue("ImageDescription")) as string;
       expect(desc.replace(/\0+$/, "")).toBe("test description");
     });
   });
@@ -241,11 +241,11 @@ describe("tiff-writer", () => {
       const tiff = await fromArrayBuffer(buffer);
 
       const image0 = await tiff.getImage(0);
-      const desc0 = image0.fileDirectory.getValue("ImageDescription");
+      const desc0 = await image0.fileDirectory.loadValue("ImageDescription");
       expect(desc0).toContain("OME");
 
       const image1 = await tiff.getImage(1);
-      const desc1 = image1.fileDirectory.getValue("ImageDescription");
+      const desc1 = await image1.fileDirectory.loadValue("ImageDescription");
       expect(desc1).toBeUndefined();
     });
   });
@@ -277,7 +277,7 @@ describe("tiff-writer", () => {
       expect(mainImage.getWidth()).toBe(64);
       expect(mainImage.getHeight()).toBe(64);
 
-      const subIfdOffsets = mainImage.fileDirectory.getValue("SubIFDs");
+      const subIfdOffsets = await mainImage.fileDirectory.loadValue("SubIFDs");
       expect(subIfdOffsets).toBeDefined();
       expect(subIfdOffsets!.length).toBe(2);
     });
@@ -298,7 +298,7 @@ describe("tiff-writer", () => {
       const buffer = await buildTiff([ifd]);
       const tiff = await fromArrayBuffer(buffer);
       const mainImage = await tiff.getImage(0);
-      const subIfdOffsets = mainImage.fileDirectory.getValue("SubIFDs");
+      const subIfdOffsets = await mainImage.fileDirectory.loadValue("SubIFDs");
       expect(subIfdOffsets).toBeDefined();
       expect(subIfdOffsets!.length).toBe(1);
     });

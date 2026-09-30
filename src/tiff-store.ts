@@ -188,15 +188,10 @@ export class TiffStore {
     let imageDescription: string | undefined
 
     try {
-      imageDescription = firstImage.fileDirectory.getValue("ImageDescription")
+      imageDescription =
+        await firstImage.fileDirectory.loadValue("ImageDescription")
     } catch {
-      // Tag not available synchronously, try async
-      try {
-        imageDescription =
-          await firstImage.fileDirectory.loadValue("ImageDescription")
-      } catch {
-        // No ImageDescription
-      }
+      // No ImageDescription
     }
 
     if (imageDescription && isOmeXml(imageDescription)) {

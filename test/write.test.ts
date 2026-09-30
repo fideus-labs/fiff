@@ -239,7 +239,7 @@ describe("toOmeTiff", () => {
 
       const tiff = await fromArrayBuffer(buffer);
       const image = await tiff.getImage(0);
-      const desc = (image.fileDirectory.getValue("ImageDescription") as string)?.replace(/\0+$/, "");
+      const desc = ((await image.fileDirectory.loadValue("ImageDescription")) as string)?.replace(/\0+$/, "");
 
       expect(desc).toBeDefined();
       expect(desc).toContain("OME");
@@ -339,7 +339,7 @@ describe("toOmeTiff", () => {
 
       const tiff = await fromArrayBuffer(buffer);
       const image = await tiff.getImage(0);
-      const desc = (image.fileDirectory.getValue("ImageDescription") as string)?.replace(/\0+$/, "");
+      const desc = ((await image.fileDirectory.loadValue("ImageDescription")) as string)?.replace(/\0+$/, "");
       expect(desc).toContain('SizeC="2"');
     });
   });
@@ -382,7 +382,7 @@ describe("toOmeTiff", () => {
       expect(image.getWidth()).toBe(32);
       expect(image.getHeight()).toBe(32);
 
-      const subIfdOffsets = image.fileDirectory.getValue("SubIFDs");
+      const subIfdOffsets = await image.fileDirectory.loadValue("SubIFDs");
       expect(subIfdOffsets).toBeDefined();
       expect(subIfdOffsets!.length).toBe(1);
     });

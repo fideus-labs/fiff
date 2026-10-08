@@ -9,8 +9,8 @@
  * for fast random access.
  */
 
+import { GeoTIFFImage } from "geotiff"
 import type GeoTIFF from "geotiff"
-import type { GeoTIFFImage } from "geotiff"
 
 import { getIfdIndex, type OmePixels } from "./ome-xml.js"
 
@@ -70,17 +70,9 @@ export async function detectPyramid(
     // Parse each SubIFD to get its dimensions
     for (const offset of subIfds) {
       try {
-        const ifd = await (tiff as any).parseFileDirectoryAt(offset)
-        const subWidth =
-          ifd.fileDirectory?.getValue?.("ImageWidth") ??
-          ifd.getValue?.("ImageWidth") ??
-          Math.ceil(widths[widths.length - 1] / 2)
-        const subHeight =
-          ifd.fileDirectory?.getValue?.("ImageLength") ??
-          ifd.getValue?.("ImageLength") ??
-          Math.ceil(heights[heights.length - 1] / 2)
-        widths.push(subWidth)
-        heights.push(subHeight)
+        const image = await getImageAtOffset(tiff, offset)
+        widths.push(image.getWidth())
+        heights.push(image.getHeight())
       } catch {
         // Fallback: assume 2x downsampling
         widths.push(Math.ceil(widths[widths.length - 1] / 2))
@@ -317,20 +309,15 @@ async function getImage(
 
 /**
  * Parse an IFD at a specific byte offset and return a GeoTIFFImage.
+ *
+ * SubIFDs and pre-computed offsets are not in the main IFD chain that
+ * `GeoTIFF.getImage` walks, so the directory is parsed with the file's
+ * own parser and wrapped the way `getImage` wraps it.
  */
 async function getImageAtOffset(
   tiff: GeoTIFF,
   byteOffset: number,
 ): Promise<GeoTIFFImage> {
-  // GeoTIFF.parseFileDirectoryAt is semi-internal but widely used by Viv etc.
-  const ifd = await (tiff as any).parseFileDirectoryAt(byteOffset)
-  // Construct a GeoTIFFImage from the parsed IFD
-  // The exact constructor signature depends on geotiff.js version
-  const GeoTIFFImageClass = (await tiff.getImage(0)).constructor as any
-  return new GeoTIFFImageClass(
-    ifd.fileDirectory ?? ifd,
-    (tiff as any).littleEndian,
-    (tiff as any).cache,
-    (tiff as any).source,
-  )
+  const ifd = await tiff.parser.parseFileDirectoryAt(byteOffset)
+  return new GeoTIFFImage(ifd, tiff.littleEndian, tiff.cache, tiff.source)
 }

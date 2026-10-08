@@ -507,6 +507,25 @@ describe("toOmeTiff", () => {
       expect(store.dataType).toBe("uint16");
     });
 
+    it("TiffStore reads every level of a written pyramid", async () => {
+      const ms = await createPyramidMultiscales(16, 16);
+      const buffer = await toOmeTiff(ms, { compression: "none" });
+
+      const store = await TiffStore.fromArrayBuffer(buffer);
+      expect(store.levels).toBe(2);
+      expect(store.getShape(1)).toEqual([8, 8]);
+
+      const group = await zarr.open(store as unknown as zarr.Readable, {
+        kind: "group",
+      });
+      const half = await zarr.open(group.resolve("1"), { kind: "array" });
+      const { data } = await zarr.get(half);
+      const expected = new Uint16Array(64).map(
+        (_, index) => ((index % 8) * 2 + Math.floor(index / 8) * 2) % 65536,
+      );
+      expect(Array.from(data as Uint16Array)).toEqual(Array.from(expected));
+    });
+
     it("TiffStore reads correct metadata from written OME-TIFF", async () => {
       const ms = await create5DMultiscales(1, 2, 3, 16, 16);
       const buffer = await toOmeTiff(ms, { compression: "none" });

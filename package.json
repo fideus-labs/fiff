@@ -45,7 +45,7 @@
     "zarrita": "^0.7.5"
   },
   "peerDependencies": {
-    "@fideus-labs/ngff-zarr": "^0.34.0",
+    "@fideus-labs/ngff-zarr": "^0.38.0",
     "@fideus-labs/worker-pool": "^2.1.0"
   },
   "peerDependenciesMeta": {
@@ -57,7 +57,7 @@
     }
   },
   "devDependencies": {
-    "@fideus-labs/ngff-zarr": "^0.34.0",
+    "@fideus-labs/ngff-zarr": "^0.38.0",
     "@types/bun": "^1.4.2",
     "typescript": "^7.0.2"
   }
